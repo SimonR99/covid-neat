@@ -1,6 +1,8 @@
 import pygame as pg
 import sys
 import os
+import neat
+
 from player import Player
 from enemy import Enemy
 
@@ -26,7 +28,9 @@ class Game:
         self.img_player = pg.image.load('./res/images/player.png')
         self.next_page = 0
         self.virus_rate = 15
+        pg.display.set_caption("Covid vs AI (NEAT)")
         self.count_to_new_virus = 0
+        self.config_path = os.path.join('./neatbot/config-feedforward.txt')
 
     def screenManager(self):
         pg.display.update()
@@ -42,7 +46,7 @@ class Game:
     def menuWindow(self):
         while not self.start:
             self.screenManager()
-            self.textSurfb1, self.textRectb1 = self.TextObj("Covid vs NEAT", self.largeTextFont)
+            self.textSurfb1, self.textRectb1 = self.TextObj("Covid vs AI", self.largeTextFont)
             self.textRectb1.center = (self.screen_width/2, self.screen_height/2-100)
             self.screen.blit(self.textSurfb1, self.textRectb1)
 
@@ -60,12 +64,10 @@ class Game:
           
 
             
-
+        self.start = False
         return self.next_page
 
     def playPlayer(self):
-
-        
         self.player = Player(self.screen_width,self.screen_height)
         self.enemies = []
         self.first_enemy = Enemy(self.screen_width, self.screen_height)
@@ -87,8 +89,6 @@ class Game:
             self.first_enemy.y = 100
             self.first_enemy.x = 100
             self.first_enemy.draw(self.screen)
-
-            #self.img_virus = pg.image.load('./res/images/virus.png')
             
 
             self.count_to_new_virus += 1
@@ -100,23 +100,19 @@ class Game:
                 for x in range (0,len(self.enemies)):
                     self.enemies[x].move()
                     self.enemies[x].draw(self.screen)
-                    
-
+                    if self.enemies[x].collide(self.player.getRect()):
+                        self.is_playing = False
+       
     def playNeat(self):
-        self.is_playing = True
-        while self.is_playing:
-            self.clock.tick(15)
-            self.screen.fill((0, 150, 255))
-            self.textSurfb1, self.textRectb1 = self.TextObj("Covid vs NEAT", self.largeTextFont)
-            self.textRectb1.center = (self.screen_width/2, self.screen_height/2-100)
-            self.screen.blit(self.textSurfb1, self.textRectb1)
-
+        
+       pass
+       
     
     def settings(self):
         self.is_playing = True
         while self.is_playing:
             self.screen.fill((0, 150, 255))
-            self.textSurfb1, self.textRectb1 = self.TextObj("Covid vs NEAT", self.largeTextFont)
+            self.textSurfb1, self.textRectb1 = self.TextObj("Covid vs AI", self.largeTextFont)
             self.textRectb1.center = (self.screen_width/2, self.screen_height/2-100)
             self.screen.blit(self.textSurfb1, self.textRectb1)
 
@@ -151,25 +147,95 @@ class Game:
         return False
 
 
-
-    def CheckColision(self,player, enemy):
-        for x in range (0,len(enemy)):
-            if  (player.x_pos < (enemy[x].x_pos + enemy[x].width) and
-                player.x_pos + player.width > enemy[x].x_pos and
-                enemy[x].y_pos + enemy[x].height > self.screen_height - player.height - 40 and
-                enemy[x].y_pos <= self.screen_height - 40):
-                return True
-        return False
-
     def Check_Vision(self,player, enemy):
         table = [0,0,0,0,0,0,0,0,0]
         for i in range (0, len(enemy)):
             #if True:
             for j in range (-4,5):
                 pos = player.x_pos + j*30 + 15
-                if (pos in range(enemy[i].x_pos, enemy[i].x_pos + 30)) and (enemy[i].y_pos in range(50,screen_height)):
+                if (pos in range(enemy[i].x_pos, enemy[i].x_pos + 30)) and (enemy[i].y_pos in range(50,self.screen_height)):
                     table[j+4] = (enemy[i].y_pos)/480
                 else:
                     pass
 
         return table
+
+
+    def eval_genomes(self,genomes, config):
+        
+        
+        self.generation +=1
+
+        nets = []
+        players = []
+        ge = []
+        enemies = []
+
+        for genome_id, genome in genomes:
+            genome.fitness = 0  # start with fitness level of 0
+            net = neat.nn.FeedForwardNetwork.create(genome, config)
+            nets.append(net)
+            players.append(Player(self.screen_width/2, self.screen_height - self.player_height))
+            ge.append(genome)
+
+        clock = pg.time.Clock()
+
+        run = True
+
+        while run and len(players)>0:
+            clock.tick(30)
+
+            for event in pg.event.get():
+                if event.type == pg.QUIT:
+                    run = False
+                    pg.quit()
+                    quit()
+                    break
+
+            for x, player in enumerate(players):
+                ge[x].fitness += 0.1
+                direction =0
+                data = Check_Vision(player, enemies)
+                output = nets[players.index(player)].activate((player.x, data[0], data[1], data[2],data[3],data[4],data[5],data[6],data[7],data[8]))
+                if output[0] > 0.5:
+                    direction = -1
+                elif output[1] > 0.5:
+                    direction = 0
+                elif output[2] >0.5:
+                    direction = 1
+                player.move(direction)
+
+
+            rem = []
+            add_enemy = False
+            self.count_to_new_enemy+=1
+            if(self.count_to_new_enemy >= 20):
+                add_enemy= True
+                self.count_to_new_enemy = 10
+            if add_enemy:
+                enemies.append(Enemy(self.screen_width))
+
+            for enemy in enemies:
+                enemy.move()
+                for player in players:
+                    if enemy.collide(player, self.screen):
+                        ge[players.index(player)].fitness -= 1
+                        nets.pop(players.index(player))
+                        ge.pop(players.index(player))
+                        players.pop(players.index(player))
+
+                if enemy.y > self.screen_height:
+                    rem.append(enemy)
+
+
+
+            for r in rem:
+                enemies.remove(r)
+
+            for player in players:
+                if player.x < 5 or player.x > self.screen_width -30:
+                    nets.pop(players.index(player))
+                    ge.pop(players.index(player))
+                    players.pop(players.index(player))
+
+            draw_screen(screen, players, enemies)

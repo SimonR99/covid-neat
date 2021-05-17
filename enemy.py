@@ -22,5 +22,6 @@ class Enemy():
         
     def getRect(self):
         return self.rect_virus
+        
     def collide(self, player):
         return player.colliderect(self.rect_virus)
