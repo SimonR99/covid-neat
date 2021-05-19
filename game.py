@@ -1,3 +1,4 @@
+from neatmanager import NeatManager
 import pygame as pg
 import sys
 import os
@@ -15,7 +16,7 @@ class Game:
         #Game parameters
         self.screen_width = screen_width
         self.screen_height = screen_height
-        self.game_speed = 30
+        self.game_speed = 3000
         self.screen = pg.display.set_mode((self.screen_width, self.screen_height))
         self.clock = pg.time.Clock()
         self.largeTextFont = pg.font.Font('freesansbold.ttf',90)
@@ -103,9 +104,17 @@ class Game:
                     if self.enemies[x].collide(self.player.getRect()):
                         self.is_playing = False
        
-    def playNeat(self):
+    def playNeat(self): 
+        neat_manager = NeatManager(self.screen, self.screen_width, self.screen_height, self.game_speed)
+
+        self.is_playing = True
         
-       pass
+        neat_manager.run(self.config_path)
+        
+
+
+       
+
        
     
     def settings(self):
@@ -147,95 +156,5 @@ class Game:
         return False
 
 
-    def Check_Vision(self,player, enemy):
-        table = [0,0,0,0,0,0,0,0,0]
-        for i in range (0, len(enemy)):
-            #if True:
-            for j in range (-4,5):
-                pos = player.x_pos + j*30 + 15
-                if (pos in range(enemy[i].x_pos, enemy[i].x_pos + 30)) and (enemy[i].y_pos in range(50,self.screen_height)):
-                    table[j+4] = (enemy[i].y_pos)/480
-                else:
-                    pass
+    
 
-        return table
-
-
-    def eval_genomes(self,genomes, config):
-        
-        
-        self.generation +=1
-
-        nets = []
-        players = []
-        ge = []
-        enemies = []
-
-        for genome_id, genome in genomes:
-            genome.fitness = 0  # start with fitness level of 0
-            net = neat.nn.FeedForwardNetwork.create(genome, config)
-            nets.append(net)
-            players.append(Player(self.screen_width/2, self.screen_height - self.player_height))
-            ge.append(genome)
-
-        clock = pg.time.Clock()
-
-        run = True
-
-        while run and len(players)>0:
-            clock.tick(30)
-
-            for event in pg.event.get():
-                if event.type == pg.QUIT:
-                    run = False
-                    pg.quit()
-                    quit()
-                    break
-
-            for x, player in enumerate(players):
-                ge[x].fitness += 0.1
-                direction =0
-                data = Check_Vision(player, enemies)
-                output = nets[players.index(player)].activate((player.x, data[0], data[1], data[2],data[3],data[4],data[5],data[6],data[7],data[8]))
-                if output[0] > 0.5:
-                    direction = -1
-                elif output[1] > 0.5:
-                    direction = 0
-                elif output[2] >0.5:
-                    direction = 1
-                player.move(direction)
-
-
-            rem = []
-            add_enemy = False
-            self.count_to_new_enemy+=1
-            if(self.count_to_new_enemy >= 20):
-                add_enemy= True
-                self.count_to_new_enemy = 10
-            if add_enemy:
-                enemies.append(Enemy(self.screen_width))
-
-            for enemy in enemies:
-                enemy.move()
-                for player in players:
-                    if enemy.collide(player, self.screen):
-                        ge[players.index(player)].fitness -= 1
-                        nets.pop(players.index(player))
-                        ge.pop(players.index(player))
-                        players.pop(players.index(player))
-
-                if enemy.y > self.screen_height:
-                    rem.append(enemy)
-
-
-
-            for r in rem:
-                enemies.remove(r)
-
-            for player in players:
-                if player.x < 5 or player.x > self.screen_width -30:
-                    nets.pop(players.index(player))
-                    ge.pop(players.index(player))
-                    players.pop(players.index(player))
-
-            draw_screen(screen, players, enemies)
