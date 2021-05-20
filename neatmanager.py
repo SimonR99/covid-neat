@@ -1,33 +1,44 @@
 import os
 import neat
 import pygame as pg
-from pygame.display import get_active
+import visualize
+
 from player import Player
 from enemy import Enemy
-import visualize
+
+
 
 class NeatManager():
     def __init__(self, screen, screen_width, screen_height, game_speed):
-        self.game_speed = game_speed
+
+        # Window settings
         self.screen = screen
         self.screen_width = screen_width
         self.screen_height = screen_height
-        self.config_path = os.path.join('./neatbot/config-feedforward.txt')
-        self.generation =0
-        self.count_to_new_enemy = 0
-        self.img_background = pg.image.load("./res/images/background.png")
+        
+
+        # Game settings
         self.players = []
         self.nets = []
         self.ge = []
         self.enemies = []
+        self.generation =0
+        self.count_to_new_enemy = 0
+        self.game_speed = game_speed
+        
+        
+        #Ressources
+        self.img_background = pg.image.load("./res/images/background.png")
+        self.base_font = pg.font.Font('freesansbold.ttf', 32)
+        self.black = (0, 0, 0) 
+
 
     def eval_genomes(self, genomes, config):
         global screen, gen
         global count_to_new_enemy
 
         self.generation +=1
-
-        #print("generation en cours :", gen)
+        self.enemies = []
 
         for genome_id, genome in genomes:
             genome.fitness = 0  # start with fitness level of 0
@@ -51,45 +62,39 @@ class NeatManager():
                     break
 
             for x, player in enumerate(self.players):
-                self.ge[x].fitness += 0.1
-                direction =0
+                
                 data = player.getSmartVision(self.enemies)
-                #if x ==1:
-                 #   print(data)
-                output = self.nets[self.players.index(player)].activate((player.rect_player.x/self.screen_width, data[0], data[1], data[2],data[3],data[4],data[5],data[6],data[7],data[8]))
-                if output[0] > 0.5:
-                    direction = -1
-                elif output[1] > 0.5:
-                    direction = 0
-                elif output[2] >0.5:
-                    direction = 1
-                player.move(direction)
+                self.position = (player.rect_player.x)/self.screen_width # give x position between 0.0 and 1.0
+                self.ge[x].fitness += 1
+                
+                # The output is list compose of 3 elements base
+                output = self.nets[self.players.index(player)].activate((self.position*2,0.2*data[1]+0.5*data[2] + data[3],data[4],0.2*data[7] + 0.5*data[6] +data[5]))
+
+                max_value = max(output)
+                max_index = output.index(max_value)
+                player.move(max_index)
+                
 
 
-            rem = []
-            add_enemy = False
+            rem = [] # List enemy to remove
+            add_enemy = False 
             self.count_to_new_enemy+=1
             if(self.count_to_new_enemy >= 20):
                 add_enemy= True
                 self.count_to_new_enemy = 10
             if add_enemy:
                 self.enemies.append(Enemy(self.screen_width,self.screen_height))
-
-            for enemy in self.enemies:
+            for enemy in self.enemies: # Detect collision between enemies and players
                 enemy.move()
                 for player in self.players:
                     if enemy.collide(player.getRect()):
-                        self.ge[self.players.index(player)].fitness -= 1
                         self.nets.pop(self.players.index(player))
                         self.ge.pop(self.players.index(player))
                         self.players.pop(self.players.index(player))
-
-                if enemy.y > self.screen_height:
+                if enemy.y > self.screen_height: # Detect if virus outside the screen
                     rem.append(enemy)
 
-
-
-            for r in rem:
+            for r in rem: # Remove virus (free space)
                 self.enemies.remove(r)
 
             for player in self.players:
@@ -101,46 +106,37 @@ class NeatManager():
             self.draw_screen(self.screen, self.players, self.enemies)
 
     def draw_screen(self,screen, players, enemies):
-        self.screen.fill((0, 150, 255))
+        # Background
+        self.screen.fill((0, 150, 255)) # Blue
         self.screen.blit(self.img_background, (0,0))
-
-        font = pg.font.Font('freesansbold.ttf', 32)
-        green = (0, 255, 0)
-        blue = (0, 0, 128)
-        black = (0, 0, 0)  
-        text = font.render('Generation : ' + str(self.generation), True, black)
         
-        
+        #Text
+        self.text = self.base_font.render('Generation : ' + str(self.generation), True, self.black)
+        self.screen.blit(self.text, (20,20)) # Top left corner
 
-        self.screen.blit(text, (20,20))
-
-
+        # Draw players and enemies
         for enemy in enemies:
             enemy.draw(screen)
-            
-
         for player in players:
             player.draw(screen)
 
+        # Update all the window
         pg.display.update()
-    def run(self, config_file):
+
+    def run(self, config_file, generation):
 
         config = neat.config.Config(neat.DefaultGenome, neat.DefaultReproduction,
                             neat.DefaultSpeciesSet, neat.DefaultStagnation,
-                            config_file)
-
+                            config_file) #Load the configuration
 
         p = neat.Population(config)
-
         p.add_reporter(neat.StdOutReporter(True))
         stats = neat.StatisticsReporter()
         p.add_reporter(stats)
+        winner = p.run(self.eval_genomes , generation)
 
-
-
-        winner = p.run(self.eval_genomes, 10)
-
-        visualize.plot_stats(stats, ylog=True, view=True, filename="feedforward-fitness.svg")
+        # Produce graphics at the end.
+        visualize.plot_stats(stats, ylog=False, view=True, filename="feedforward-fitness.svg")
         visualize.plot_species(stats, view=True, filename="feedforward-speciation.svg")
 
 
